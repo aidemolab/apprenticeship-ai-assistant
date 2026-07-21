@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apprenticeship AI Assistant</title>
+  <link rel="stylesheet" href="styles.css?v=3">
+</head>
+<body>
+  <header>
+    <h1>Apprenticeship AI Assistant</h1>
+    <p class="subtitle">Find apprenticeships that match your preferences</p>
+  </header>
+
+  <main>
+    <section class="search-preferences">
+      <h2>Search Preferences</h2>
+
+      <div class="form-group">
+        <label for="travel-distance">Travel Distance</label>
+        <select id="travel-distance">
+          <option value="10">10 miles</option>
+          <option value="25" selected>25 miles</option>
+          <option value="50">50 miles</option>
+          <option value="75">75 miles</option>
+        </select>
+      </div>
+
+      <fieldset>
+        <legend>Mechanical Apprenticeship Level</legend>
+        <div class="level-options">
+          <label><input type="checkbox" name="mech-level" value="4"> Level 4</label>
+          <label><input type="checkbox" name="mech-level" value="5"> Level 5</label>
+          <label><input type="checkbox" name="mech-level" value="6"> Level 6</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Data Apprenticeship Level</legend>
+        <div class="level-options">
+          <label><input type="checkbox" name="data-level" value="3"> Level 3</label>
+          <label><input type="checkbox" name="data-level" value="4"> Level 4</label>
+          <label><input type="checkbox" name="data-level" value="5"> Level 5</label>
+          <label><input type="checkbox" name="data-level" value="6"> Level 6</label>
+        </div>
+      </fieldset>
+
+      <div class="form-group">
+        <label for="threshold">Notification Threshold</label>
+        <select id="threshold">
+          <option value="50">50% match</option>
+          <option value="60">60% match</option>
+          <option value="70">70% match</option>
+          <option value="80">80% match</option>
+          <option value="85" selected>85% match</option>
+          <option value="90">90% match</option>
+          <option value="95">95% match</option>
+        </select>
+      </div>
+
+      <button id="search-btn" class="btn-primary">Search Now</button>
+    </section>
+
+    <section class="opportunities">
+      <h2>Opportunities</h2>
+      <div id="opportunities-container">
+        <p class="empty-state">No opportunities found yet.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Apprenticeship AI Assistant &mdash; prototype</p>
+  </footer>
+
+  <script src="app.js?v=5"></script>
+</body>
+</html>

@@ -1,0 +1,321 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  line-height: 1.6;
+  color: #1a1a1a;
+  background: #f5f7fa;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  background: #1e3a5f;
+  color: #fff;
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+
+header h1 {
+  font-size: 1.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  opacity: 0.85;
+  font-size: 1rem;
+}
+
+main {
+  max-width: 720px;
+  width: 100%;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  flex: 1;
+}
+
+section {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+h2 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  color: #1e3a5f;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+select {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+  background: #fff;
+}
+
+fieldset {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+legend {
+  font-weight: 600;
+  padding: 0 0.25rem;
+}
+
+.level-options {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.level-options label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 0.75rem;
+  background: #1e3a5f;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-primary:hover {
+  background: #2a5080;
+}
+
+.empty-state {
+  text-align: center;
+  color: #888;
+  padding: 2rem 0;
+  font-style: italic;
+}
+
+.validation-error {
+  text-align: center;
+  color: #c62828;
+  padding: 1rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  background: #ffebee;
+  border: 1px solid #ef9a9a;
+  border-radius: 4px;
+}
+
+.search-message {
+  text-align: center;
+  color: #2e7d32;
+  padding: 0.5rem 0;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* --- Opportunity Card --- */
+.opp-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.opp-card-header {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.opp-card-header h3 {
+  font-size: 1.1rem;
+  color: #1e3a5f;
+  margin-bottom: 0.15rem;
+}
+
+.opp-employer {
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.match-badge {
+  flex-shrink: 0;
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.match-high {
+  background: #2e7d32;
+}
+
+.match-review {
+  background: #e65100;
+}
+
+.opp-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem 1rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.opp-meta div {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.opp-meta dt {
+  font-weight: 600;
+  color: #555;
+  white-space: nowrap;
+}
+
+.opp-meta dd {
+  color: #333;
+}
+
+.opp-eligibility {
+  margin-bottom: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  background: #fff8e1;
+  border-left: 3px solid #f9a825;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.85rem;
+}
+
+.opp-eligibility-label {
+  font-weight: 700;
+  color: #e65100;
+  margin-bottom: 0.15rem;
+}
+
+.opp-eligibility-detail {
+  color: #555;
+}
+
+.opp-details {
+  margin-bottom: 0.75rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+}
+
+.opp-details summary {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  list-style: none;
+}
+
+.opp-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.opp-details-title {
+  font-weight: 600;
+  color: #1e3a5f;
+}
+
+.opp-details-title::before {
+  content: '▸ ';
+}
+
+.opp-details[open] .opp-details-title::before {
+  content: '▾ ';
+}
+
+.opp-details-helper {
+  font-size: 0.82rem;
+  color: #888;
+  font-weight: 400;
+}
+
+.opp-strengths,
+.opp-risks {
+  margin-bottom: 0.5rem;
+}
+
+.opp-strengths h4 {
+  color: #2e7d32;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+.opp-strengths ul,
+.opp-risks ul {
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+  color: #333;
+}
+
+.opp-risks h4 {
+  color: #c62828;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+.opp-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.opp-review-label {
+  font-size: 0.85rem;
+  color: #e65100;
+  font-weight: 600;
+  flex: 1;
+}
+
+.btn-small {
+  width: auto;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  text-decoration: none;
+  display: inline-block;
+}
+
+footer {
+  text-align: center;
+  padding: 1.5rem;
+  color: #888;
+  font-size: 0.85rem;
+}

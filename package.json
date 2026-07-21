@@ -1,0 +1,14 @@
+{
+  "name": "apprenticeship-ai-assistant",
+  "version": "1.0.0",
+  "description": "AI-powered apprenticeship search assistant",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "keywords": ["apprenticeships", "ai", "search"],
+  "license": "UNLICENSED",
+  "private": true
+}
