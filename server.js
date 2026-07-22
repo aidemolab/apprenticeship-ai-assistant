@@ -464,6 +464,10 @@ async function handleAPI(pathname, req, res) {
             status: 'review',
             pathway: vacancyPathway,
           };
+          if (threshold > 0 && opp.matchScore < threshold) {
+            skipped.push({ reference: r.reference, title: r.title, reason: 'below suitability threshold', matchScore: opp.matchScore, threshold });
+            continue;
+          }
           existing.push(opp);
           await saveOpps(existing);
           accepted = opp;
