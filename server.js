@@ -56,7 +56,7 @@ function isDuplicate(opps, ref) {
   return opps.some(o => o.reference === ref);
 }
 
-const GOV_DISTANCES = [2, 5, 10, 15, 20, 30, 40];
+const GOV_DISTANCES = [2, 5, 10, 15, 20, 30, 40, 75];
 
 function nearestGOVDistance(req) {
   const n = Number(req) || 25;
@@ -448,7 +448,7 @@ async function handleAPI(pathname, req, res) {
               continue;
             }
           }
-          const threshold = parseInt(prefs.threshold) || 85;
+          const threshold = prefs.threshold !== undefined && prefs.threshold !== '' ? Number(prefs.threshold) : 85;
           const opp = {
             reference: r.reference, title: r.title, employer: r.employer,
             url: r.url, location: r.location || 'Unknown', distance: r.distance,
