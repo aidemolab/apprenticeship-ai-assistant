@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderCard(opp, searchThreshold) {
     const threshold = searchThreshold != null ? searchThreshold : (opp.notificationThreshold || 85);
-    const meetsThreshold = opp.matchScore >= threshold;
+    const meetsThreshold = threshold === 0 || opp.matchScore >= threshold;
     const matchClass = meetsThreshold ? 'match-high' : 'match-review';
 
     const strengths = (opp.strengths || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
@@ -49,9 +49,11 @@ document.addEventListener('DOMContentLoaded', () => {
         </details>
 
         <div class="opp-actions">
-          <span class="opp-review-label">${meetsThreshold
-            ? `Meets alert threshold &mdash; ${opp.matchScore}% is at or above the ${threshold}% email-alert threshold.`
-            : `Review opportunity &mdash; ${opp.matchScore}% is below the ${threshold}% email-alert threshold.`}</span>
+          <span class="opp-review-label">${threshold === 0
+            ? `Free search &mdash; showing this matching vacancy regardless of suitability score.`
+            : meetsThreshold
+              ? `Meets minimum suitability score &mdash; ${opp.matchScore}% is at or above ${threshold}%.`
+              : `Review opportunity &mdash; ${opp.matchScore}% is below the ${threshold}% minimum.`}</span>
           <a href="${escapeHtml(opp.url)}" target="_blank" rel="noopener" class="btn-primary btn-small">View on GOV.UK ↗</a>
         </div>
       </article>`;
