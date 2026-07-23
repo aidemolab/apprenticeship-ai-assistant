@@ -11,3 +11,4 @@ data/opportunities.json
 backups/
 data/__test_isolation__/
 tmp-diag.mjs
+eng.traineddata

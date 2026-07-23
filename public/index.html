@@ -26,33 +26,57 @@
         </select>
       </div>
 
-      <fieldset>
-        <legend>Mechanical Apprenticeship Level</legend>
-        <div class="level-options">
-          <label><input type="checkbox" name="mech-level" value="4"> Level 4</label>
-          <label><input type="checkbox" name="mech-level" value="5"> Level 5</label>
-          <label><input type="checkbox" name="mech-level" value="6"> Level 6</label>
-        </div>
-      </fieldset>
+      <div class="form-group">
+        <label for="programme-select">Apprenticeship Programme / Route</label>
+        <select id="programme-select">
+          <option value="">Select an apprenticeship programme...</option>
+          <option value="Mechanical Engineering">Mechanical Engineering</option>
+          <option value="Automotive Engineering">Automotive Engineering</option>
+          <option value="Manufacturing Engineering">Manufacturing Engineering</option>
+          <option value="Welding and Fabrication Engineering">Welding and Fabrication Engineering</option>
+          <option value="Rail Engineering">Rail Engineering</option>
+          <option value="Aerospace Engineering">Aerospace Engineering</option>
+          <option value="Electrical Engineering">Electrical Engineering</option>
+          <option value="Electronics Engineering">Electronics Engineering</option>
+          <option value="Civil Engineering">Civil Engineering</option>
+          <option value="Building Services Engineering">Building Services Engineering</option>
+          <option value="Maintenance Engineering">Maintenance Engineering</option>
+          <option value="Energy and Utilities Engineering">Energy and Utilities Engineering</option>
+          <option value="Data Engineering">Data Engineering</option>
+          <option value="Data Technician">Data Technician</option>
+          <option value="Data Analyst">Data Analyst</option>
+          <option value="Software Development">Software Development</option>
+          <option value="Cyber Security">Cyber Security</option>
+          <option value="Network Engineering">Network Engineering</option>
+          <option value="Business and Administration">Business and Administration</option>
+          <option value="Accountancy and Finance">Accountancy and Finance</option>
+          <option value="Supply Chain and Logistics">Supply Chain and Logistics</option>
+          <option value="Environmental and Sustainability">Environmental and Sustainability</option>
+          <option value="Laboratory and Scientific">Laboratory and Scientific</option>
+          <option value="Other Engineering and Technology">Other Engineering and Technology</option>
+        </select>
+      </div>
 
       <fieldset>
-        <legend>Data Apprenticeship Level</legend>
+        <legend>Apprenticeship Level</legend>
         <div class="level-options">
-          <label><input type="checkbox" name="data-level" value="3"> Level 3</label>
-          <label><input type="checkbox" name="data-level" value="4"> Level 4</label>
-          <label><input type="checkbox" name="data-level" value="5"> Level 5</label>
-          <label><input type="checkbox" name="data-level" value="6"> Level 6</label>
+          <label><input type="checkbox" name="level" value="2"> Level 2</label>
+          <label><input type="checkbox" name="level" value="3"> Level 3</label>
+          <label><input type="checkbox" name="level" value="4"> Level 4</label>
+          <label><input type="checkbox" name="level" value="5"> Level 5</label>
+          <label><input type="checkbox" name="level" value="6"> Level 6</label>
+          <label><input type="checkbox" name="level" value="7"> Level 7</label>
         </div>
       </fieldset>
 
       <div class="form-group">
         <label for="threshold">Minimum suitability score</label>
         <select id="threshold">
+          <option value="0">Free search</option>
           <option value="50">50% match</option>
           <option value="60">60% match</option>
           <option value="70">70% match</option>
           <option value="80">80% match</option>
-          <option value="0">0% — Free search, show all matching vacancies</option>
           <option value="85" selected>85% match</option>
           <option value="90">90% match</option>
           <option value="95">95% match</option>
@@ -61,6 +85,80 @@
 
       <button id="search-btn" class="btn-primary">Search Now</button>
     </section>
+
+    <details class="assess-opportunity-section" id="assess-section">
+      <summary class="assess-summary">
+        <h2>Assess an opportunity</h2>
+      </summary>
+      <div class="assess-content">
+        <p class="assess-note">Text-based PDFs are supported. Images use OCR. Scanned PDFs may require manual completion.</p>
+
+        <form id="extract-doc-form" class="upload-panel" enctype="multipart/form-data">
+          <div class="field">
+            <label for="document-upload">Upload document (PDF, PNG, JPG, JPEG):</label>
+            <input type="file" id="document-upload" name="file" accept=".pdf,.png,.jpg,.jpeg">
+          </div>
+          <button type="submit" id="extract-details-btn" class="btn-secondary">Extract details</button>
+          <span id="extract-loading" class="loading-message" style="display: none;">Extracting vacancy details...</span>
+        </form>
+
+        <div id="extract-error" class="error-message" style="display: none;"></div>
+
+        <form id="confirm-vacancy-form" class="confirmation-form" style="display: none;">
+          <h3>Confirm vacancy details</h3>
+          <div class="form-grid">
+            <div class="field">
+              <label for="edit-title">Vacancy Title:</label>
+              <input type="text" id="edit-title" name="title">
+            </div>
+            <div class="field">
+              <label for="edit-employer">Employer:</label>
+              <input type="text" id="edit-employer" name="employer">
+            </div>
+            <div class="field">
+              <label for="edit-location">Location:</label>
+              <input type="text" id="edit-location" name="location">
+            </div>
+            <div class="field">
+              <label for="edit-salary">Salary:</label>
+              <input type="text" id="edit-salary" name="salary">
+            </div>
+            <div class="field">
+              <label for="edit-deadline">Application Deadline:</label>
+              <input type="text" id="edit-deadline" name="deadline">
+            </div>
+            <div class="field">
+              <label for="edit-level">Apprenticeship Level:</label>
+              <input type="text" id="edit-level" name="level">
+            </div>
+            <div class="field">
+              <label for="edit-qualification">Qualification:</label>
+              <input type="text" id="edit-qualification" name="qualification">
+            </div>
+            <div class="field">
+              <label for="edit-trainingProvider">Training Provider:</label>
+              <input type="text" id="edit-trainingProvider" name="trainingProvider">
+            </div>
+          </div>
+
+          <div class="field field-full">
+            <label for="edit-description">Vacancy Description:</label>
+            <textarea id="edit-description" name="description" rows="4"></textarea>
+          </div>
+          <div class="field field-full">
+            <label for="edit-requirements">Candidate Requirements:</label>
+            <textarea id="edit-requirements" name="requirements" rows="3"></textarea>
+          </div>
+          <div class="field field-full">
+            <label for="edit-sourceFilename">Source Filename:</label>
+            <input type="text" id="edit-sourceFilename" name="sourceFilename" readonly>
+          </div>
+          <button type="submit" id="confirm-assess-btn" class="btn-primary" disabled>Confirm and assess</button>
+        </form>
+
+        <div id="manual-result-container" class="manual-result-area"></div>
+      </div>
+    </details>
 
     <section class="opportunities">
       <h2>Opportunities</h2>

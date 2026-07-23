@@ -79,11 +79,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   searchBtn.addEventListener('click', async () => {
+    const levels = getSelectedLevels('level');
     const mechLevels = getSelectedLevels('mech-level');
     const dataLevels = getSelectedLevels('data-level');
 
-    if (mechLevels.length === 0 && dataLevels.length === 0) {
-      container.innerHTML = '<p class="validation-error">Select at least one mechanical or data apprenticeship level before searching.</p>';
+    if (levels.length === 0 && mechLevels.length === 0 && dataLevels.length === 0) {
+      container.innerHTML = '<p class="validation-error">Select at least one apprenticeship level before searching.</p>';
       return;
     }
 
@@ -92,18 +93,21 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const distance = document.getElementById('travel-distance').value;
       const threshold = document.getElementById('threshold').value;
+      const programme = document.getElementById('programme-select')?.value || '';
+
+      const preferences = {
+        programme,
+        levels,
+        distance,
+        threshold,
+      };
+      if (mechLevels.length) preferences.mechLevels = mechLevels;
+      if (dataLevels.length) preferences.dataLevels = dataLevels;
 
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          preferences: {
-            distance,
-            mechLevels,
-            dataLevels,
-            threshold,
-          }
-        })
+        body: JSON.stringify({ preferences })
       });
 
       const data = await res.json();
@@ -128,4 +132,153 @@ document.addEventListener('DOMContentLoaded', () => {
       container.innerHTML = '<p class="empty-state">Could not reach the server. Please try again.</p>';
     }
   });
+
+  // Stage 2: Document Extraction Handler
+  const extractDocForm = document.getElementById('extract-doc-form');
+  const extractDetailsBtn = document.getElementById('extract-details-btn');
+  const extractLoading = document.getElementById('extract-loading');
+  const extractError = document.getElementById('extract-error');
+  const confirmVacancyForm = document.getElementById('confirm-vacancy-form');
+  const documentUpload = document.getElementById('document-upload');
+
+  if (extractDocForm) {
+    extractDocForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      if (!documentUpload || !documentUpload.files || !documentUpload.files.length) {
+        if (extractError) {
+          extractError.textContent = 'Please select a document file to upload.';
+          extractError.style.display = 'block';
+        }
+        return;
+      }
+
+      const file = documentUpload.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+
+      if (extractDetailsBtn) extractDetailsBtn.disabled = true;
+      if (extractLoading) extractLoading.style.display = 'inline';
+      if (extractError) extractError.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/extract-document', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          if (extractError) {
+            extractError.textContent = data.message || 'Extraction failed. Please check the file and try again.';
+            extractError.style.display = 'block';
+          }
+          if (confirmVacancyForm) confirmVacancyForm.style.display = 'none';
+          return;
+        }
+
+        const ext = data.extracted || {};
+        if (document.getElementById('edit-title')) document.getElementById('edit-title').value = ext.title || '';
+        if (document.getElementById('edit-employer')) document.getElementById('edit-employer').value = ext.employer || '';
+        if (document.getElementById('edit-location')) document.getElementById('edit-location').value = ext.location || '';
+        if (document.getElementById('edit-salary')) document.getElementById('edit-salary').value = ext.salary || '';
+        if (document.getElementById('edit-deadline')) document.getElementById('edit-deadline').value = ext.deadline || '';
+        if (document.getElementById('edit-level')) document.getElementById('edit-level').value = ext.level != null ? ext.level : '';
+        if (document.getElementById('edit-qualification')) document.getElementById('edit-qualification').value = ext.qualification || '';
+        if (document.getElementById('edit-trainingProvider')) document.getElementById('edit-trainingProvider').value = ext.trainingProvider || '';
+        if (document.getElementById('edit-description')) document.getElementById('edit-description').value = ext.description || '';
+        if (document.getElementById('edit-requirements')) document.getElementById('edit-requirements').value = ext.requirements || '';
+        if (document.getElementById('edit-sourceFilename')) document.getElementById('edit-sourceFilename').value = ext.sourceFilename || file.name || '';
+
+        if (confirmVacancyForm) confirmVacancyForm.style.display = 'block';
+        const confirmAssessBtn = document.getElementById('confirm-assess-btn');
+        if (confirmAssessBtn) confirmAssessBtn.disabled = false;
+      } catch {
+        if (extractError) {
+          extractError.textContent = 'Could not reach server to extract document.';
+          extractError.style.display = 'block';
+        }
+      } finally {
+        if (extractDetailsBtn) extractDetailsBtn.disabled = false;
+        if (extractLoading) extractLoading.style.display = 'none';
+      }
+    });
+  }
+
+  // Stage 3: Confirmation & Manual Opportunity Assessment Handler
+  if (confirmVacancyForm) {
+    confirmVacancyForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const confirmAssessBtn = document.getElementById('confirm-assess-btn');
+      const manualContainer = document.getElementById('manual-result-container');
+      const title = document.getElementById('edit-title')?.value.trim();
+      const employer = document.getElementById('edit-employer')?.value.trim();
+      const level = document.getElementById('edit-level')?.value.trim();
+
+      if (!title || !employer || !level) {
+        if (manualContainer) {
+          manualContainer.innerHTML = '<p class="validation-error">Title, employer, and apprenticeship level are required.</p>';
+        }
+        return;
+      }
+
+      const vacancy = {
+        title,
+        employer,
+        location: document.getElementById('edit-location')?.value.trim() || '',
+        salary: document.getElementById('edit-salary')?.value.trim() || '',
+        deadline: document.getElementById('edit-deadline')?.value.trim() || '',
+        level,
+        qualification: document.getElementById('edit-qualification')?.value.trim() || '',
+        trainingProvider: document.getElementById('edit-trainingProvider')?.value.trim() || '',
+        description: document.getElementById('edit-description')?.value.trim() || '',
+        requirements: document.getElementById('edit-requirements')?.value.trim() || '',
+        sourceFilename: document.getElementById('edit-sourceFilename')?.value.trim() || '',
+      };
+
+      const distance = document.getElementById('travel-distance')?.value || '25';
+      const threshold = document.getElementById('threshold')?.value || '85';
+      const programme = document.getElementById('programme-select')?.value || '';
+      const levels = Array.from(document.querySelectorAll('input[name="levels"]:checked')).map(cb => cb.value);
+
+      const preferences = { programme, levels, distance, threshold };
+
+      if (confirmAssessBtn) {
+        confirmAssessBtn.disabled = true;
+        confirmAssessBtn.textContent = 'Assessing opportunity...';
+      }
+
+      try {
+        const res = await fetch('/api/assess-manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vacancy, preferences }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.accepted) {
+          if (manualContainer) {
+            manualContainer.innerHTML = `<p class="validation-error">${escapeHtml(data.message || 'Assessment rejected.')}</p>`;
+          }
+          return;
+        }
+
+        if (data.opportunity && manualContainer) {
+          manualContainer.innerHTML = renderCard(data.opportunity, data.searchThreshold);
+        }
+      } catch {
+        if (manualContainer) {
+          manualContainer.innerHTML = '<p class="validation-error">Could not reach server to complete assessment.</p>';
+        }
+      } finally {
+        if (confirmAssessBtn) {
+          confirmAssessBtn.disabled = false;
+          confirmAssessBtn.textContent = 'Confirm and assess';
+        }
+      }
+    });
+  }
 });

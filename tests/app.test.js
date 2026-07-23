@@ -12,7 +12,7 @@ const PROD_DATA = join(__dirname, '..', 'data', 'opportunities.json');
 const TEST_DATA_DIR = join(__dirname, '..', 'data', '__test_isolation__');
 const TEST_DATA = join(TEST_DATA_DIR, 'opportunities.json');
 
-let server;
+let server, loadOpportunities;
 let originalKey;
 let prodChecksum;
 
@@ -382,12 +382,21 @@ before(async () => {
 
   const mod = await import('../server.js');
   server = mod.server;
+  loadOpportunities = mod.loadOpportunities;
   originalKey = process.env.FIRECRAWL_API_KEY;
   await new Promise(resolve => server.listen(3099, resolve));
 });
 
 after(async () => {
-  server.close();
+  if (server) {
+    if (typeof server.closeIdleConnections === 'function') {
+      server.closeIdleConnections();
+    }
+    if (typeof server.closeAllConnections === 'function') {
+      server.closeAllConnections();
+    }
+    await new Promise(resolve => server.close(resolve));
+  }
   restoreKey(originalKey);
   await rm(TEST_DATA_DIR, { recursive: true, force: true });
   const current = await checksum(PROD_DATA);
@@ -396,7 +405,10 @@ after(async () => {
 
 function get(path) {
   return new Promise((resolve, reject) => {
-    http.get(`${BASE}${path}`, res => {
+    http.get(`${BASE}${path}`, {
+      headers: { Connection: 'close' },
+      agent: false
+    }, res => {
       let body = '';
       res.on('data', chunk => body += chunk);
       res.on('end', () => {
@@ -412,7 +424,8 @@ function post(path, data) {
     const body = JSON.stringify(data);
     const req = http.request(`${BASE}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), Connection: 'close' },
+      agent: false
     }, res => {
       let resp = '';
       res.on('data', chunk => resp += chunk);
@@ -704,22 +717,15 @@ describe('filterByCriteria — combined search independent level enforcement', (
 // Threshold wording (API: searchThreshold in response)
 // ============================================================
 describe('Threshold wording via API searchThreshold', () => {
-  // We test the search endpoint with mocked fetch so we can observe searchThreshold
-  // in the response and validate the wording logic in isolation.
-
-  before(async () => {
-    await resetData([]);
+  before(() => {
     process.env.FIRECRAWL_API_KEY = '***';
-    globalThis.fetch = mockFetch(['VAC0001']); // Mechanical L6, score 78
-  });
-  after(() => {
-    globalThis.fetch = mockFetch(['VAC0001', 'VAC0002', 'VAC0003']);
   });
 
   it('default threshold (85) returned in searchThreshold field', async () => {
     await resetData([]);
+    globalThis.fetch = mockFetch(['VAC0001']);
     const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4', '5', '6'], dataLevels: [] } });
-    assert.equal(body.searchThreshold, 85, 'searchThreshold must equal the default 85');
+    assert.equal(body.searchThreshold, 85, 'default searchThreshold must be 85');
   });
 
   it('non-default threshold 50 returned in searchThreshold field', async () => {
@@ -729,79 +735,56 @@ describe('Threshold wording via API searchThreshold', () => {
     assert.equal(body.searchThreshold, 50, 'searchThreshold must reflect the requested 50% threshold');
   });
 
-  it('score 78 below default threshold 85: notificationThreshold stored as 85', async () => {
+  it('score 78 is hidden at threshold 85 and recorded in skipped', async () => {
     await resetData([]);
     globalThis.fetch = mockFetch(['VAC0001']);
-    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4', '5', '6'], dataLevels: [] } });
-    // matchScore=78 < threshold=85 → "below" wording territory
-    assert.equal(body.accepted.matchScore, 78);
-    assert.equal(body.searchThreshold, 85);
-    assert.ok(body.accepted.matchScore < body.searchThreshold, '78 must be below 85');
+    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4', '5', '6'], dataLevels: [], threshold: '85' } });
+    assert.equal(body.accepted, null, '78% score must be hidden at threshold 85');
+    assert.equal(body.opportunities.length, 0, 'No opportunities should be returned when below threshold 85');
+    assert.ok(body.skipped.some(s => s.reason === 'below suitability threshold'), 'Must record reason as below suitability threshold');
+    assert.ok(body.message.includes('selected 85% threshold'), 'Response message must state threshold condition');
   });
 
-  it('score 78 at or above threshold 50: meets alert threshold territory', async () => {
+  it('score 78 is shown at threshold 50', async () => {
     await resetData([]);
     globalThis.fetch = mockFetch(['VAC0001']);
     const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4', '5', '6'], dataLevels: [], threshold: '50' } });
+    assert.ok(body.accepted, '78% vacancy must be accepted at threshold 50');
     assert.equal(body.accepted.matchScore, 78);
-    assert.equal(body.searchThreshold, 50);
-    assert.ok(body.accepted.matchScore >= body.searchThreshold, '78 must be ≥ 50');
+    assert.equal(body.opportunities.length, 1);
   });
 
-  it('score 78 equal to threshold 78: meets alert threshold territory', async () => {
+  it('score 78 is shown in Free search (threshold 0)', async () => {
+    await resetData([]);
+    globalThis.fetch = mockFetch(['VAC0001']);
+    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4', '5', '6'], dataLevels: [], threshold: '0' } });
+    assert.ok(body.accepted, '78% vacancy must be accepted in Free search');
+    assert.equal(body.accepted.matchScore, 78);
+    assert.equal(body.opportunities.length, 1);
+  });
+
+  it('score 78 equal to threshold 78 is accepted', async () => {
     await resetData([]);
     globalThis.fetch = mockFetch(['VAC0001']);
     const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4', '5', '6'], dataLevels: [], threshold: '78' } });
-    assert.equal(body.searchThreshold, 78);
-    assert.ok(body.accepted.matchScore >= body.searchThreshold, '78 must be ≥ 78 (equal counts as meeting threshold)');
+    assert.ok(body.accepted, '78% vacancy must be accepted when threshold equals 78');
+    assert.equal(body.accepted.matchScore, 78);
   });
 
-  it('score 78 above threshold 70: meets alert threshold territory', async () => {
+  it('score 78 above threshold 70 is accepted', async () => {
     await resetData([]);
     globalThis.fetch = mockFetch(['VAC0001']);
     const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4', '5', '6'], dataLevels: [], threshold: '70' } });
-    assert.equal(body.searchThreshold, 70);
-    assert.ok(body.accepted.matchScore >= body.searchThreshold, '78 must be ≥ 70');
+    assert.ok(body.accepted, '78% vacancy must be accepted when threshold equals 70');
   });
 
-  it('app.js renderCard: 78% with threshold 50 produces meets-threshold label', () => {
-    // Verify the wording logic directly without a browser
-    function thresholdLabel(matchScore, threshold) {
-      const meetsThreshold = matchScore >= threshold;
-      return meetsThreshold
-        ? `Meets alert threshold — ${matchScore}% is at or above the ${threshold}% email-alert threshold.`
-        : `Review opportunity — ${matchScore}% is below the ${threshold}% email-alert threshold.`;
+  it('app.js renderCard: renders meets-threshold for non-zero threshold and free search label for threshold 0', () => {
+    function meetsThreshold(matchScore, threshold) {
+      return threshold === 0 || matchScore >= threshold;
     }
-    assert.equal(
-      thresholdLabel(78, 50),
-      'Meets alert threshold — 78% is at or above the 50% email-alert threshold.'
-    );
-  });
-
-  it('app.js renderCard: 78% with threshold 85 produces below-threshold label', () => {
-    function thresholdLabel(matchScore, threshold) {
-      const meetsThreshold = matchScore >= threshold;
-      return meetsThreshold
-        ? `Meets alert threshold — ${matchScore}% is at or above the ${threshold}% email-alert threshold.`
-        : `Review opportunity — ${matchScore}% is below the ${threshold}% email-alert threshold.`;
-    }
-    assert.equal(
-      thresholdLabel(78, 85),
-      'Review opportunity — 78% is below the 85% email-alert threshold.'
-    );
-  });
-
-  it('app.js renderCard: 78% equal to threshold 78 produces meets-threshold label', () => {
-    function thresholdLabel(matchScore, threshold) {
-      const meetsThreshold = matchScore >= threshold;
-      return meetsThreshold
-        ? `Meets alert threshold — ${matchScore}% is at or above the ${threshold}% email-alert threshold.`
-        : `Review opportunity — ${matchScore}% is below the ${threshold}% email-alert threshold.`;
-    }
-    assert.equal(
-      thresholdLabel(78, 78),
-      'Meets alert threshold — 78% is at or above the 78% email-alert threshold.'
-    );
+    assert.strictEqual(meetsThreshold(78, 85), false);
+    assert.strictEqual(meetsThreshold(78, 50), true);
+    assert.strictEqual(meetsThreshold(78, 0), true);
   });
 });
 
@@ -818,6 +801,179 @@ describe('buildSearchURL pathway', () => {
     const url = buildSearchURL({ distance: 10, mechLevels: [], dataLevels: ['3'] });
     const ids = [...url.matchAll(/routeIds=(\d+)/g)].map(m => m[1]);
     assert.ok(ids.includes('7'));
+  });
+
+  const allDetailedProgrammes = [
+    { programme: 'Mechanical Engineering', routeId: '9' },
+    { programme: 'Automotive Engineering', routeId: '9' },
+    { programme: 'Manufacturing Engineering', routeId: '9' },
+    { programme: 'Welding and Fabrication Engineering', routeId: '9' },
+    { programme: 'Rail Engineering', routeId: '9' },
+    { programme: 'Aerospace Engineering', routeId: '9' },
+    { programme: 'Electrical Engineering', routeId: '9' },
+    { programme: 'Electronics Engineering', routeId: '9' },
+    { programme: 'Civil Engineering', routeId: '5' },
+    { programme: 'Building Services Engineering', routeId: '5' },
+    { programme: 'Maintenance Engineering', routeId: '9' },
+    { programme: 'Energy and Utilities Engineering', routeId: '9' },
+    { programme: 'Data Engineering', routeId: '7' },
+    { programme: 'Data Technician', routeId: '7' },
+    { programme: 'Data Analyst', routeId: '7' },
+    { programme: 'Software Development', routeId: '7' },
+    { programme: 'Cyber Security', routeId: '7' },
+    { programme: 'Network Engineering', routeId: '7' },
+    { programme: 'Business and Administration', routeId: '2' },
+    { programme: 'Accountancy and Finance', routeId: '12' },
+    { programme: 'Supply Chain and Logistics', routeId: '15' },
+    { programme: 'Environmental and Sustainability', routeId: '1' },
+    { programme: 'Laboratory and Scientific', routeId: '11' },
+    { programme: 'Other Engineering and Technology', routeId: '9' },
+  ];
+
+  for (const { programme, routeId } of allDetailedProgrammes) {
+    it(`maps programme "${programme}" to routeIds=${routeId}`, () => {
+      const url = buildSearchURL({ distance: 25, programme });
+      const ids = [...url.matchAll(/routeIds=(\d+)/g)].map(m => m[1]);
+      assert.ok(ids.includes(routeId), `URL for "${programme}" must include routeIds=${routeId}`);
+    });
+  }
+});
+
+describe('Stage 2 — Unified Levels 2–7 & Programme-Aware Filtering', () => {
+  let buildSearchURL, filterByCriteria, matchProgramme, matchLevel;
+  before(async () => {
+    const mod = await import('../server.js');
+    buildSearchURL = mod.buildSearchURL;
+    filterByCriteria = mod.filterByCriteria;
+    matchProgramme = mod.matchProgramme;
+    matchLevel = mod.matchLevel;
+  });
+
+  it('buildSearchURL appends unified levels 2-7 correctly', () => {
+    const url = buildSearchURL({ distance: 25, programme: 'Construction and building', levels: ['2', '3', '4', '5', '6', '7'] });
+    const levelIds = [...url.matchAll(/levelIds=(\d+)/g)].map(m => m[1]);
+    assert.deepEqual(levelIds, ['2', '3', '4', '5', '6', '7']);
+  });
+
+  it('matchProgramme rejects a clearly unrelated vacancy', () => {
+    const vacancy = { title: 'Senior Hairdresser', sector: 'Beauty', description: 'Salon styling role' };
+    assert.strictEqual(matchProgramme(vacancy, 'Construction and building'), false);
+  });
+  it('Automotive search rejects Apprentice Welding Engineer', () => {
+    const weldVac = { title: 'Apprentice Welding Engineer', sector: 'Engineering & Manufacturing', level: 3 };
+    assert.strictEqual(matchProgramme(weldVac, 'Automotive Engineering'), false);
+  });
+
+  it('Automotive search accepts Vehicle Maintenance Technician', () => {
+    const autoVac = { title: 'Vehicle Maintenance Technician Apprentice', sector: 'Automotive', level: 3 };
+    assert.strictEqual(matchProgramme(autoVac, 'Automotive Engineering'), true);
+  });
+
+  it('Welding search accepts Apprentice Welding Engineer', () => {
+    const weldVac = { title: 'Apprentice Welding Engineer', sector: 'Engineering & Manufacturing', level: 3 };
+    assert.strictEqual(matchProgramme(weldVac, 'Welding and Fabrication Engineering'), true);
+  });
+
+  it('Free search (threshold 0) does not bypass detailed programme filtering', () => {
+    const opps = [
+      { reference: 'VAC_WELD', title: 'Apprentice Welding Engineer', sector: 'Engineering', level: 3, distance: 5, matchScore: 78 }
+    ];
+    const filtered = filterByCriteria(opps, { programme: 'Automotive Engineering', levels: ['3'], threshold: '0' });
+    assert.strictEqual(filtered.length, 0, 'Welding vacancy must be rejected for Automotive search even in Free search');
+  });
+
+  it('matchProgramme retains an ambiguous vacancy for review rather than confirming or rejecting', () => {
+    const vacancy = { title: 'Trainee Assistant', sector: 'General', ambiguous: true };
+    assert.strictEqual(matchProgramme(vacancy, 'Construction and building'), 'review');
+  });
+
+  it('matchProgramme with All Programmes ("") does not apply keyword filtering', () => {
+    const vacancy = { title: 'Senior Hairdresser', sector: 'Beauty' };
+    assert.strictEqual(matchProgramme(vacancy, ''), true);
+  });
+
+  it('matchLevel validates Level 2 and Level 7 individually', () => {
+    assert.strictEqual(matchLevel({ level: 2 }, ['2']), true);
+    assert.strictEqual(matchLevel({ level: 7 }, ['7']), true);
+    assert.strictEqual(matchLevel({ level: 3 }, ['2']), false);
+    assert.strictEqual(matchLevel({ level: 6 }, ['7']), false);
+  });
+
+  it('filterByCriteria handles multiple unified levels correctly', () => {
+    const opps = [
+      { reference: 'VAC1', title: 'Apprentice Carpenter', sector: 'Construction', level: 2, distance: 5 },
+      { reference: 'VAC2', title: 'Site Manager Apprentice', sector: 'Construction', level: 6, distance: 5 },
+      { reference: 'VAC3', title: 'Civil Engineering Lead', sector: 'Construction', level: 7, distance: 5 },
+    ];
+    const filtered = filterByCriteria(opps, { programme: 'Construction and building', levels: ['2', '7'] });
+    assert.strictEqual(filtered.length, 2);
+    assert.deepEqual(filtered.map(o => o.reference), ['VAC1', 'VAC3']);
+  });
+
+  it('empty levels array validation rejects request', () => {
+    function validateForm(levels, mechLevels, dataLevels) {
+      if (levels.length === 0 && mechLevels.length === 0 && dataLevels.length === 0) {
+        return 'Select at least one apprenticeship level before searching.';
+      }
+      return 'ok';
+    }
+    assert.strictEqual(validateForm([], [], []), 'Select at least one apprenticeship level before searching.');
+    assert.strictEqual(validateForm(['4'], [], []), 'ok');
+  });
+
+  it('POST /api/search with programme and empty levels returns 400', async () => {
+    const res = await post('/api/search', { preferences: { programme: 'Construction and building', levels: [] } });
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(res.body.error, 'missing_levels');
+  });
+
+  it('POST /api/search with programme and missing levels returns 400', async () => {
+    const res = await post('/api/search', { preferences: { programme: 'Construction and building' } });
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(res.body.error, 'missing_levels');
+  });
+
+  it('POST /api/search with legacy mechLevels remains accepted', async () => {
+    const res = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4'], dataLevels: [] } });
+    assert.notStrictEqual(res.status, 400);
+  });
+
+  it('confirmed match sets programmeMatch: confirmed while ambiguous sets programmeMatch: review', () => {
+    const confirmedVac = { title: 'Apprentice Carpenter', sector: 'Construction', level: 3 };
+    const ambiguousVac = { title: 'General Trainee', sector: 'General', ambiguous: true, level: 3 };
+    assert.strictEqual(matchProgramme(confirmedVac, 'Construction and building'), true);
+    assert.strictEqual(matchProgramme(ambiguousVac, 'Construction and building'), 'review');
+  });
+
+  it('matchProgramme matches Health vacancies for Health and science programme', () => {
+    const vacancy = { title: 'Apprentice Healthcare Science Assistant', sector: 'Health & Science', level: 2 };
+    assert.strictEqual(matchProgramme(vacancy, 'Health and science'), true);
+  });
+
+  it('matchLevel validates vacancy level against target levels', () => {
+    assert.strictEqual(matchLevel({ level: 4 }, ['4', '5']), true);
+    assert.strictEqual(matchLevel({ level: 2 }, ['4', '5']), false);
+    assert.strictEqual(matchLevel({ level: null }, ['4', '5']), true);
+  });
+
+  it('filterByCriteria retains non-Mechanical and non-Data programme results when programme selected', () => {
+    const opps = [
+      { reference: 'VAC1', title: 'Apprentice Carpenter', sector: 'Construction', level: 3, distance: 5 },
+      { reference: 'VAC2', title: 'Data Analyst', sector: 'Digital', level: 4, distance: 5 },
+    ];
+    const filtered = filterByCriteria(opps, { programme: 'Construction and building', levels: ['3'] });
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].reference, 'VAC1');
+  });
+
+  it('filterByCriteria preserves legacy mechanical levels filtering', () => {
+    const opps = [
+      { reference: 'VAC1', title: 'Mechanical Fitter', pathway: 'mechanical', level: 4, distance: 5 },
+      { reference: 'VAC2', title: 'Mechanical Fitter', pathway: 'mechanical', level: 2, distance: 5 },
+    ];
+    const filtered = filterByCriteria(opps, { mechLevels: ['4'], dataLevels: [] });
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].reference, 'VAC1');
   });
 });
 
@@ -872,7 +1028,7 @@ describe('Firecrawl live search', () => {
   it('accepts suitable mechanical vacancy', async () => {
     await resetData([]);
     process.env.FIRECRAWL_API_KEY = '***';
-    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4', '5', '6'], dataLevels: [] } });
+    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4', '5', '6'], dataLevels: [], threshold: '50' } });
     assert.equal(body.accepted.employer, 'United Infrastructure');
     assert.equal(body.accepted.pathway, 'mechanical');
   });
@@ -919,7 +1075,7 @@ describe('Firecrawl live search', () => {
     await resetData([]);
     globalThis.fetch = mockFetch(['VAC0006']); // Data Analyst
     process.env.FIRECRAWL_API_KEY = '***';
-    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: [], dataLevels: ['3', '4'] } });
+    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: [], dataLevels: ['3', '4'], threshold: '50' } });
     assert.ok(body.accepted, 'Data Analyst should be parsed and accepted');
     assert.equal(body.accepted.employer, 'FOURTEEN (NORTH WEST) LTD');
     assert.equal(body.accepted.level, 4);
@@ -931,7 +1087,7 @@ describe('Firecrawl live search', () => {
     await resetData([]);
     globalThis.fetch = mockFetch(['VAC0007']); // Data Engineer
     process.env.FIRECRAWL_API_KEY = '***';
-    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: [], dataLevels: ['4'] } });
+    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: [], dataLevels: ['4'], threshold: '50' } });
     assert.ok(body.accepted, 'Data Engineer should be parsed and accepted');
     assert.equal(body.accepted.employer, 'Big Data Corp Ltd');
     assert.equal(body.accepted.level, 4);
@@ -943,7 +1099,7 @@ describe('Firecrawl live search', () => {
     await resetData([]);
     globalThis.fetch = mockFetch(['VAC0004']); // Data Technician
     process.env.FIRECRAWL_API_KEY = '***';
-    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: [], dataLevels: ['3'] } });
+    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: [], dataLevels: ['3'], threshold: '50' } });
     assert.ok(body.accepted, 'Data Technician should be parsed and accepted');
     assert.equal(body.accepted.employer, 'DataCorp Ltd');
     assert.equal(body.accepted.level, 3);
@@ -1024,7 +1180,7 @@ describe('Firecrawl live search', () => {
         eligibility: '', strengths: [], risks: [], status: 'review' },
     ]);
     process.env.FIRECRAWL_API_KEY = '***';
-    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4', '5', '6'], dataLevels: [] } });
+    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4', '5', '6'], dataLevels: [], threshold: '50' } });
     assert.equal(body.opportunities.filter(o => o.reference === 'V-DUP').length, 1);
   });
 
@@ -1032,7 +1188,7 @@ describe('Firecrawl live search', () => {
     await resetData([]);
     globalThis.fetch = mockFetch(['VAC0001', 'VAC0004']); // mech L6, data tech L3
     process.env.FIRECRAWL_API_KEY = '***';
-    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4', '5', '6'], dataLevels: ['3'] } });
+    const { body } = await post('/api/search', { preferences: { distance: 25, mechLevels: ['4', '5', '6'], dataLevels: ['3'], threshold: '50' } });
     assert.ok(body.accepted, 'should accept first matching vacancy');
     globalThis.fetch = mockFetch(['VAC0001', 'VAC0002', 'VAC0003']);
   });
@@ -1071,6 +1227,26 @@ describe('API basics', () => {
     assert.ok(body.includes('notificationThreshold'));
     assert.ok(body.includes('threshold'));
   });
+  it('index.html has no apprenticeship level checkboxes checked by default', async () => {
+    const { body } = await get('/');
+    assert.ok(body.includes('name="level"'), 'Must contain level checkboxes');
+    assert.ok(!body.match(/name="level"[^>]*checked/), 'No level checkbox should be checked by default');
+  });
+  it('index.html suitability threshold options are sorted in ascending order with Free search label', async () => {
+    const { body } = await get('/');
+    assert.ok(body.includes('<option value="0">Free search</option>'));
+    const thresholdBlock = body.match(/<select id="threshold">([\s\S]*?)<\/select>/)[1];
+    const options = [...thresholdBlock.matchAll(/<option value="(\d+)"([^>]*)>([^<]+)<\/option>/g)].map(m => ({
+      val: m[1],
+      selected: m[2].includes('selected'),
+      label: m[3].trim()
+    }));
+    assert.deepEqual(options.map(o => o.val), ['0', '50', '60', '70', '80', '85', '90', '95']);
+    assert.strictEqual(options[0].label, 'Free search');
+    const selected = options.find(o => o.selected);
+    assert.ok(selected, 'Must have a default selected option');
+    assert.strictEqual(selected.val, '85');
+  });
 });
 
 // Legacy
@@ -1094,5 +1270,152 @@ describe('Legacy filtering', () => {
       candidate: { title: 'Missile Apprentice', employer: 'BAE Systems', description: 'Weapons.' }
     });
     assert.equal(status, 422);
+  });
+});
+
+describe('Stage 2 — Frontend Assess Opportunity Form', () => {
+  it('upload section exists and is collapsed by default', async () => {
+    const html = await readFile(join(__dirname, '..', 'public', 'index.html'), 'utf-8');
+    assert.ok(html.includes('<details class="assess-opportunity-section" id="assess-section">'));
+    assert.ok(html.includes('<h2>Assess an opportunity</h2>'));
+    assert.ok(!html.includes('<details class="assess-opportunity-section" id="assess-section" open>'), 'Section must be collapsed by default (no open attribute)');
+  });
+
+  it('file input accepts exact specified document extensions', async () => {
+    const html = await readFile(join(__dirname, '..', 'public', 'index.html'), 'utf-8');
+    assert.ok(html.includes('accept=".pdf,.png,.jpg,.jpeg"'), 'File input must accept .pdf,.png,.jpg,.jpeg');
+  });
+
+  it('index.html contains all 11 required confirmation form fields and note', async () => {
+    const html = await readFile(join(__dirname, '..', 'public', 'index.html'), 'utf-8');
+    assert.ok(html.includes('Text-based PDFs are supported. Images use OCR. Scanned PDFs may require manual completion.'));
+    assert.ok(html.includes('id="edit-title"'));
+    assert.ok(html.includes('id="edit-employer"'));
+    assert.ok(html.includes('id="edit-location"'));
+    assert.ok(html.includes('id="edit-salary"'));
+    assert.ok(html.includes('id="edit-deadline"'));
+    assert.ok(html.includes('id="edit-level"'));
+    assert.ok(html.includes('id="edit-qualification"'));
+    assert.ok(html.includes('id="edit-trainingProvider"'));
+    assert.ok(html.includes('id="edit-description"'));
+    assert.ok(html.includes('id="edit-requirements"'));
+    assert.ok(html.includes('id="edit-sourceFilename"'));
+  });
+
+  it('Confirm and assess button remains inactive in Stage 2', async () => {
+    const html = await readFile(join(__dirname, '..', 'public', 'index.html'), 'utf-8');
+    assert.ok(html.includes('id="confirm-assess-btn"'), 'Confirm and assess button must exist');
+    assert.ok(html.includes('id="confirm-assess-btn" class="btn-primary" disabled>'), 'Confirm and assess button must be disabled in Stage 2');
+  });
+
+  it('app.js handles loading state and populates confirmation form fields', async () => {
+    const js = await readFile(join(__dirname, '..', 'public', 'app.js'), 'utf-8');
+    assert.ok(js.includes('fetch(\'/api/extract-document\''), 'app.js calls /api/extract-document');
+    assert.ok(js.includes('extractDetailsBtn.disabled = true'), 'Disables button during fetch to prevent duplicate submissions');
+    assert.ok(js.includes('edit-title'), 'Populates edit-title');
+    assert.ok(js.includes('edit-sourceFilename'), 'Populates edit-sourceFilename');
+  });
+});
+
+describe('Stage 3 — Manual Opportunity Assessment', () => {
+  it('edited values, rather than original extracted values, are assessed', async () => {
+    const res = await post('/api/assess-manual', {
+      vacancy: {
+        title: 'Edited Mechanical Maintenance Lead',
+        employer: 'North West Engineering',
+        level: 3,
+        qualification: 'Diploma',
+      },
+      preferences: { programme: 'Mechanical Engineering', levels: ['3'], threshold: 85 }
+    });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.accepted, true);
+    assert.strictEqual(res.body.opportunity.title, 'Edited Mechanical Maintenance Lead');
+  });
+
+  it('defence opportunity is rejected', async () => {
+    const res = await post('/api/assess-manual', {
+      vacancy: {
+        title: 'Apprentice Missile Technician',
+        employer: 'BAE Systems',
+        level: 3,
+        description: 'Weapons system development'
+      },
+      preferences: { programme: 'Mechanical Engineering', levels: ['3'] }
+    });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.accepted, false);
+    assert.strictEqual(res.body.reason, 'defence');
+  });
+
+  it('programme match succeeds for matching role', async () => {
+    const res = await post('/api/assess-manual', {
+      vacancy: { title: 'Apprentice Vehicle Maintenance Engineer', employer: 'Bolton Auto Ltd', level: 3 },
+      preferences: { programme: 'Automotive Engineering', levels: ['3'] }
+    });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.accepted, true);
+  });
+
+  it('programme mismatch is reported for unmatching role', async () => {
+    const res = await post('/api/assess-manual', {
+      vacancy: { title: 'Apprentice Welding Technician', employer: 'Weld Corp', level: 3 },
+      preferences: { programme: 'Automotive Engineering', levels: ['3'] }
+    });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.accepted, false);
+    assert.strictEqual(res.body.reason, 'programme_mismatch');
+  });
+
+  it('level mismatch is reported', async () => {
+    const res = await post('/api/assess-manual', {
+      vacancy: { title: 'Apprentice Mechanical Engineer', employer: 'North West Eng', level: 2 },
+      preferences: { programme: 'Mechanical Engineering', levels: ['6'] }
+    });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.accepted, false);
+    assert.strictEqual(res.body.reason, 'level_mismatch');
+  });
+
+  it('Free search (threshold 0) displays a below-threshold result', async () => {
+    const res = await post('/api/assess-manual', {
+      vacancy: { title: 'Apprentice Mechanical Engineer', employer: 'North West Eng', level: 3, matchScore: 78 },
+      preferences: { programme: 'Mechanical Engineering', levels: ['3'], threshold: 0 }
+    });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.accepted, true);
+    assert.strictEqual(res.body.opportunity.matchScore, 78);
+  });
+
+  it('85% threshold hides a 78% result', async () => {
+    const res = await post('/api/assess-manual', {
+      vacancy: { title: 'Apprentice Mechanical Engineer', employer: 'North West Eng', level: 3, matchScore: 78 },
+      preferences: { programme: 'Mechanical Engineering', levels: ['3'], threshold: 85 }
+    });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.accepted, false);
+    assert.strictEqual(res.body.reason, 'below_threshold');
+  });
+
+  it('successful assessment renders in the manual-assessment area in HTML', async () => {
+    const html = await readFile(join(__dirname, '..', 'public', 'index.html'), 'utf-8');
+    assert.ok(html.includes('<div id="manual-result-container" class="manual-result-area"></div>'), 'manual-result-container must exist inside assess-opportunity-section');
+  });
+
+  it('no opportunity is saved automatically to data file', async () => {
+    const beforeOpps = await loadOpportunities();
+    await post('/api/assess-manual', {
+      vacancy: { title: 'Apprentice Mechanical Engineer', employer: 'North West Eng', level: 3 },
+      preferences: { programme: 'Mechanical Engineering', levels: ['3'] }
+    });
+    const afterOpps = await loadOpportunities();
+    assert.strictEqual(beforeOpps.length, afterOpps.length, 'Data file must not be modified automatically');
+  });
+
+  it('app.js prevents duplicate clicks during assessment fetch', async () => {
+    const js = await readFile(join(__dirname, '..', 'public', 'app.js'), 'utf-8');
+    assert.ok(js.includes('fetch(\'/api/assess-manual\''), 'app.js posts to /api/assess-manual');
+    assert.ok(js.includes('confirmAssessBtn.disabled = true'), 'Disables confirm button while assessing');
+    assert.ok(js.includes('Assessing opportunity...'), 'Shows assessing loading state');
   });
 });
